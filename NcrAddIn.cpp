@@ -58,14 +58,14 @@ static Aliases g_PropNames[] = {
     {L"Скорость",                       L"Speed"},
     {L"СтопБиты",                       L"StopBits"},
     {L"Четность",                       L"Parity"},
-    {L"Кодировка",                      L"CodePage"},
+    {L"НаборСимволов",                  L"CodePage"},
     {L"ОписаниеРезультата",             L"ResultDescription"},
     {L"КолвоСтолбцовДисплея",           L"DeviceColumnCount"},
     {L"УстройствоВключено",             L"DeviceTurnedOn"},
     {L"ЗадержкаПовтораБегСтроки",       L"MarqueeRepeatDelay"},
     {L"ЗадержкаПоказаБегСтроки",        L"MarqueeShowDelay"},
     {L"ТипБегСтроки",                   L"MarqueeType"},
-    {L"ТекушееОкно",                    L"CurrentWindow"},
+    {L"ТекущееОкно",                    L"CurrentWindow"},
     {L"ФорматБегСтроки",                L"MarqueeFormat"},
     {L"КолвоОкон",                      L"WindowCount"},
     {{0}, {0}}
@@ -88,6 +88,8 @@ static const wchar_t g_kClassNames[] = L"CAddInNCR5976"; //"|OtherClass1|OtherCl
 uint32_t convToShortWchar(WCHAR_T** Dest, const wchar_t* Source, uint32_t len = 0);
 uint32_t convFromShortWchar(wchar_t** Dest, const WCHAR_T* Source, uint32_t len = 0);
 uint32_t getLenShortWcharStr(const WCHAR_T* Source);
+
+uint32_t convFromWtoCP866(char **dest, const WCHAR_T *Source, uint32_t len);
 
 //++ dmpas::debug
 namespace Debug {
@@ -288,7 +290,30 @@ bool CAddInNCR5976::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
         pvarPropVal->lVal = NCR_INT_API;
         break;
     case eProp_Result:
+        TV_VT(pvarPropVal) = VTYPE_I4;
+		pvarPropVal->lVal = m_devices.Current().GetResult();
+        break;
     case eProp_CurrentDeviceNumber:
+        TV_VT(pvarPropVal) = VTYPE_I4;
+		pvarPropVal->lVal = m_devices.GetCurrentDeviceNumber();
+        break;
+    case eProp_DeviceColumnCount:
+        TV_VT(pvarPropVal) = VTYPE_I4;
+		pvarPropVal->lVal = 20; /* TODO: Зашитое количество столбцов дисплея */
+        break;
+    case eProp_WindowCount:
+        TV_VT(pvarPropVal) = VTYPE_I4;
+		pvarPropVal->lVal = 1; /* TODO: Зашитое количество окон */
+        break;
+    case eProp_DeviceTurnedOn:
+		TV_VT(pvarPropVal) = VTYPE_BOOL;
+		pvarPropVal->bVal = m_devices.Current().TurnedOn();
+		break;
+    case eProp_CurrentWindow:
+        TV_VT(pvarPropVal) = VTYPE_I4;
+		pvarPropVal->lVal = 0; /* TODO: Зашитое количество окон */
+        break;
+
     case eProp_CurrentDeviceName:
     case eProp_Model:
     case eProp_DataBits:
@@ -299,14 +324,10 @@ bool CAddInNCR5976::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
     case eProp_Parity:
     case eProp_CodePage:
     case eProp_ResultDescription:
-    case eProp_DeviceColumnCount:
-    case eProp_DeviceTurnedOn:
     case eProp_MarqueeRepeatDelay:
     case eProp_MarqueeShowDelay:
     case eProp_MarqueeType:
-    case eProp_CurrentWindow:
     case eProp_MarqueeFormat:
-    case eProp_WindowCount:
 
     default:
         return false;
@@ -323,8 +344,28 @@ bool CAddInNCR5976::SetPropVal(const long lPropNum, tVariant *varPropVal)
     case eProp_Version:
         return false;
 
-    case eProp_Result:
     case eProp_CurrentDeviceNumber:
+		{
+			int Device = varPropVal->lVal;
+			m_devices.Current(Device);
+			return true;
+		}
+    case eProp_Result:
+		return false;
+
+    case eProp_DeviceTurnedOn:
+		{
+			int Value = varPropVal->lVal;
+			if (Value)
+				m_devices.Current().TurnOn();
+			else
+				m_devices.Current().TurnOff();
+
+			break;
+		}
+    case eProp_CurrentWindow:
+		return true;
+
     case eProp_CurrentDeviceName:
     case eProp_Model:
     case eProp_DataBits:
@@ -336,11 +377,9 @@ bool CAddInNCR5976::SetPropVal(const long lPropNum, tVariant *varPropVal)
     case eProp_CodePage:
     case eProp_ResultDescription:
     case eProp_DeviceColumnCount:
-    case eProp_DeviceTurnedOn:
     case eProp_MarqueeRepeatDelay:
     case eProp_MarqueeShowDelay:
     case eProp_MarqueeType:
-    case eProp_CurrentWindow:
     case eProp_MarqueeFormat:
     case eProp_WindowCount:
         return true;
@@ -534,45 +573,51 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
     switch(lMethodNum)
     {
 	case eMeth_AddDevice:
-		m_devices.AddDevice();
-		m_devices.Current().Open("COM3");
-		break;
+			m_devices.AddDevice();
+			m_devices.Current().Open("COM3");
+			
+			m_devices.Current().SendByte(0x1B);
+			m_devices.Current().SendByte(0x23);
+
+			break;
 
 	case eMeth_SendByte:
 		{
-		tVariant *var = paParams;
-		char byte = (char)(var->intVal);
+			tVariant *var = paParams;
+			char byte = (char)(var->intVal);
 
-		m_devices.Current().SendData(&byte);
+			m_devices.Current().SendData(&byte);
 
-		break;
-	}
-        /*
-    case eMethEnable:
-        m_boolEnabled = true;
-        break;
-    case eMethDisable:
-        m_boolEnabled = false;
-        break;
-    case eMethShowInStatusLine:
-        if (m_iConnect && lSizeArray)
-        {
-            tVariant *var = paParams;
-            m_iConnect->SetStatusLine(var->pwstrVal);
+			break;
+		}
 
-            Sleep(5000);
-        }
-        break;
-    case eMethStartTimer:
-        pAsyncEvent = m_iConnect;
-        break;
-    case eMethStopTimer:
-        if (m_uiTimer != 0)
-            ::KillTimer(NULL,m_uiTimer);
-        m_uiTimer = 0;
-        pAsyncEvent = NULL;
-        break;
-        */
+	case eMeth_DeleteDevice:
+			m_devices.DeleteDevice();
+			break;
+
+	case eMeth_CreateWindow:
+		{
+			break;
+		}
+
+	case eMeth_ClearText:
+		{
+			m_devices.Current().ClearText();
+			break;
+		}
+
+	case eMeth_ShowTextPos:
+		{
+			int Row = paParams[0].lVal;
+			int Col = paParams[1].lVal;
+
+			WCHAR_T *W_str = paParams[2].pwstrVal;
+			char *data = 0;
+			::convFromWtoCP866(&data, W_str, paParams[2].wstrLen);
+			m_devices.Current().SendString(data);
+			break;
+		}
+
     default:
         return false;
     }
@@ -696,3 +741,50 @@ uint32_t getLenShortWcharStr(const WCHAR_T* Source)
     return res;
 }
 //---------------------------------------------------------------------------//
+int decodeOne(WCHAR_T c)
+{
+	if (c < 0x80)
+		return c;
+
+	/* А-Я */
+	if (c >= 0x410 && c <= 0x42F)
+		return c + 0x80 - 0x410;
+
+	/* а-п */
+	if (c >= 0x430 && c <= 0x43F)
+		return c + 0xA0 - 0x430;
+
+	/* п-я */
+	if (c >= 0x440 && c <= 0x44F)
+		return c + 0xE0 - 0x440;
+
+	/* Ё */
+	if (c == 0x401)
+		return 0xF0;
+
+	/* ё */
+	if (c == 0x451)
+		return 0xF1;
+
+	return 0x20; /* Неизвестный знак */
+}
+
+uint32_t convFromWtoCP866(char **dest, const WCHAR_T *Source, uint32_t len)
+{
+	if (!len)
+		len = getLenShortWcharStr(Source) + 1;
+	if (!*dest)
+		*dest = new char[len];
+	char *tmp = *dest;
+	const WCHAR_T *src = Source;
+	uint32_t res = 0;
+
+	::memset(*dest, 0, len * sizeof(**dest));
+	do {
+		*tmp++ = decodeOne(*src++);
+		++res;
+	} while (len-- && *src);
+	*tmp = 0;
+
+	return res;
+}

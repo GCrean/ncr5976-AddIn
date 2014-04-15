@@ -55,6 +55,12 @@ bool NcrComPort::SendData(const char *data)
     return retVal;
 }
 
+bool NcrComPort::SendByte(int byte)
+{
+	char b = byte;
+	return SendData(&b);
+}
+
 int NcrComPort::ReadByte()
 {
     DCB dcb;
@@ -143,4 +149,55 @@ const NcrComPort &NcrDeviceList::Current() const
     if (m_CurrentDeviceNumber == -1)
         throw std::exception();
     return at(m_CurrentDeviceNumber);
+}
+
+void NcrDeviceList::Current(unsigned DeviceNumber)
+{
+	if (DeviceNumber < size())
+		m_CurrentDeviceNumber = DeviceNumber;
+}
+
+void NcrDeviceList::DeleteDevice()
+{
+	if (m_CurrentDeviceNumber < size())
+		erase(begin() + m_CurrentDeviceNumber);
+	if (m_CurrentDeviceNumber >= size())
+		m_CurrentDeviceNumber = size() - 1;
+}
+
+int NcrComPort::GetResult() const
+{
+	return m_Result;
+}
+
+
+void NcrComPort::TurnOn()
+{
+	SendByte(0x1B);
+	SendByte(0x05);
+
+	m_turned_on = true;
+}
+
+void NcrComPort::TurnOff()
+{
+	m_turned_on = false;
+}
+
+bool NcrComPort::TurnedOn() const
+{
+	return m_turned_on;
+}
+
+void NcrComPort::ClearText()
+{
+	SendByte(0x1B);
+	SendByte(0x02);
+}
+
+void NcrComPort::SendString(const char *str)
+{
+	while (*str) {
+		SendByte(*str++);
+	}
 }

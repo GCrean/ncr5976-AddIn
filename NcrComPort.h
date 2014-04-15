@@ -21,7 +21,18 @@ public:
 
     int ReadByte();
     bool SendData(const char *data);
+	bool SendByte(int byte);
+	void SendString(const char *str);
+
     void Open(const char *port);
+
+	int GetResult() const;
+
+	void TurnOn();
+	void TurnOff();
+	bool TurnedOn() const;
+
+	void ClearText();
 
 protected:
 private:
@@ -33,6 +44,9 @@ private:
     const char         *Port;
     int                 m_model;
     std::wstring        m_DeviceName;
+
+	int					m_Result;
+	bool				m_turned_on;
 };
 
 class NcrDeviceList : public std::vector<NcrComPort> {
@@ -41,13 +55,17 @@ public:
     NcrDeviceList();
 
     void AddDevice();
+	void DeleteDevice();
+
     int GetCurrentDeviceNumber() const;
 
     NcrComPort &Current();
     const NcrComPort &Current() const;
 
+	void Current(unsigned DeviceNumber);
+
 private:
-    int m_CurrentDeviceNumber;
+    unsigned m_CurrentDeviceNumber;
 };
 
 
