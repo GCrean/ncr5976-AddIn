@@ -34,6 +34,9 @@ public:
 
 	void ClearText();
 
+	void SetCursorPos(int Row, int Col);
+	unsigned GetColumnCount() const;
+
 protected:
 private:
 

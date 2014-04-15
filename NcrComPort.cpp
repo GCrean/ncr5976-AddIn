@@ -201,3 +201,16 @@ void NcrComPort::SendString(const char *str)
 		SendByte(*str++);
 	}
 }
+
+void NcrComPort::SetCursorPos(int Row, int Col)
+{
+	int X = Row*GetColumnCount() + Col;
+	SendByte(0x1B);
+	SendByte(0x13);
+	SendByte(X);
+}
+
+unsigned NcrComPort::GetColumnCount() const
+{
+	return 20;
+}

@@ -20,7 +20,7 @@
   Модель
   БитыДанных
   ЗагружатьШрифты
-  Порт
+  НомерПорта
   Скорость
   СтопБиты
   Четность
@@ -54,8 +54,8 @@ static Aliases g_PropNames[] = {
     {L"Модель",                         L"Model"},
     {L"БитыДанных",                     L"DataBits"},
     {L"ЗагружатьШрифты",                L"LoadFonts"},
-    {L"Порт",                           L"Port"},
-    {L"Скорость",                       L"Speed"},
+    {L"НомерПорта",                     L"Port"},
+    {L"СкоростьОбмена",                 L"Speed"},
     {L"СтопБиты",                       L"StopBits"},
     {L"Четность",                       L"Parity"},
     {L"НаборСимволов",                  L"CodePage"},
@@ -92,6 +92,7 @@ uint32_t getLenShortWcharStr(const WCHAR_T* Source);
 uint32_t convFromWtoCP866(char **dest, const WCHAR_T *Source, uint32_t len);
 
 //++ dmpas::debug
+static bool NO_LOG = true;
 namespace Debug {
     static bool first = true;
     static bool enabled = true;
@@ -100,6 +101,9 @@ namespace Debug {
 
     void log(const char *text)
     {
+		if (NO_LOG)
+			return;
+
         if (!enabled)
             return;
 
@@ -113,6 +117,9 @@ namespace Debug {
     }
     void log(const WCHAR_T *text)
     {
+		if (NO_LOG)
+			return;
+
         if (!enabled)
             return;
 
@@ -299,7 +306,7 @@ bool CAddInNCR5976::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
         break;
     case eProp_DeviceColumnCount:
         TV_VT(pvarPropVal) = VTYPE_I4;
-		pvarPropVal->lVal = 20; /* TODO: Зашитое количество столбцов дисплея */
+		pvarPropVal->lVal = m_devices.Current().GetColumnCount();
         break;
     case eProp_WindowCount:
         TV_VT(pvarPropVal) = VTYPE_I4;
@@ -575,7 +582,10 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 	case eMeth_AddDevice:
 			m_devices.AddDevice();
 			m_devices.Current().Open("COM3");
-			
+
+			m_devices.Current().SendByte(0x1B);
+			m_devices.Current().SendByte(0x05);
+
 			m_devices.Current().SendByte(0x1B);
 			m_devices.Current().SendByte(0x23);
 
@@ -614,6 +624,7 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			WCHAR_T *W_str = paParams[2].pwstrVal;
 			char *data = 0;
 			::convFromWtoCP866(&data, W_str, paParams[2].wstrLen);
+			m_devices.Current().SetCursorPos(Row, Col);
 			m_devices.Current().SendString(data);
 			break;
 		}
