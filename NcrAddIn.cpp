@@ -584,10 +584,13 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			m_devices.Current().Open("COM3");
 
 			m_devices.Current().SendByte(0x1B);
+			m_devices.Current().SendByte(0x02);
+
+			m_devices.Current().SendByte(0x1B);
 			m_devices.Current().SendByte(0x05);
 
 			m_devices.Current().SendByte(0x1B);
-			m_devices.Current().SendByte(0x23);
+			m_devices.Current().SendByte(0x22);
 
 			break;
 
