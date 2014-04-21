@@ -1,5 +1,7 @@
 #include "NcrComPort.h"
 
+extern int timer_counter = 0;
+
 NcrComPort::NcrComPort()
 {
 }
@@ -176,11 +178,17 @@ void NcrComPort::TurnOn()
 	SendByte(0x1B);
 	SendByte(0x05);
 
+	SendByte(0x1B);
+	SendByte(0x0C); // ScreenSave = Off
+
 	m_turned_on = true;
 }
 
 void NcrComPort::TurnOff()
 {
+	SendByte(0x1B);
+	SendByte(0x0B); // ScreenSave = On
+
 	m_turned_on = false;
 }
 
@@ -202,6 +210,26 @@ void NcrComPort::SendString(const char *str)
 	}
 }
 
+void NcrComPort::SendStringLimited(const char *str, int n)
+{
+	while (*str && n) {
+		SendByte(*str++);
+		--n;
+	}
+}
+
+void NcrComPort::SendStringLimitedBlanked(const char *str, int n)
+{
+	while (*str && n) {
+		SendByte(*str++);
+		--n;
+	}
+	if (n) {
+		while (n--)
+			SendByte(' ');
+	}
+}
+
 void NcrComPort::SetCursorPos(int Row, int Col)
 {
 	int X = Row*GetColumnCount() + Col;
@@ -213,4 +241,195 @@ void NcrComPort::SetCursorPos(int Row, int Col)
 unsigned NcrComPort::GetColumnCount() const
 {
 	return 20;
+}
+
+NcrWindow::NcrWindow()
+	: timerId(0)
+{
+}
+
+int NcrComPort::WindowCount() const
+{
+	return m_windows.size();
+}
+
+NcrWindow &NcrComPort::CurrentWindow()
+{
+	return m_windows[m_current_window];
+}
+
+const NcrWindow &NcrComPort::CurrentWindow() const
+{
+	return m_windows[m_current_window];
+}
+
+int NcrComPort::CurrentWindowNumber() const
+{
+	return m_current_window;
+}
+
+void NcrComPort::CreateNcrWindow(int Yview, int Xview, int Hview, int Wview, int Hwindow, int Wwindow)
+{
+
+	NcrWindow w(Port, Yview, Xview, Hview, Wview, Hwindow, Wwindow);
+	m_current_window = m_windows.size();
+	m_windows.push_back(w);
+
+}
+
+void NcrComPort::DeleteNcrWindow()
+{
+	m_windows.erase(m_windows.begin() + m_current_window);
+}
+
+void NcrComPort::CurrentWindowNumber(int num)
+{
+	m_current_window = num;
+}
+
+NcrWindow::NcrWindow(
+		const char *port,
+		int Yview,
+		int Xview,
+		int Hview,
+		int Wview,
+		int Hwindow,
+		int Wwindow)
+		:
+	port (port),
+	Yview (Yview),
+	Xview (Xview),
+	Hview (Hview),
+	Wview (Wview),
+	Hwindow (Hwindow),
+	Wwindow (Wwindow)
+
+{}
+
+
+
+
+NcrWindow::~NcrWindow()
+{
+	if (timerId)
+		StopMarquee();
+}
+
+void NcrWindow::OutputText()
+{
+}
+
+void NcrWindow::StartMarquee()
+{
+	if (timerId)
+		StopMarquee();
+	timerId = AddMarquee(port, Text, Xview, Yview, MarqueeUnitWait, Wwindow);
+}
+
+void NcrWindow::StopMarquee()
+{
+	if (timerId) {
+		DeleteMarquee(timerId);
+		timerId = 0;
+	}
+}
+
+void NcrMarqueeData::Step()
+{
+	NcrComPort D(port);
+	D.SetCursorPos(y, x);
+	D.SendStringLimitedBlanked(&text.c_str()[pos], width);
+	if (pos < text.size())
+		++pos;
+	else {
+		pos = 0;
+	}
+}
+
+NcrMarqueeData::NcrMarqueeData()
+	: timerId(0)
+{}
+
+static std::vector<NcrMarqueeData> Marquees;
+
+static int call_c = 0x30;
+
+static volatile bool lock = false;
+
+VOID CALLBACK MyTimerProc(
+  HWND hwnd,    // handle of window for timer messages
+  UINT uMsg,    // WM_TIMER message
+  UINT idEvent, // timer identifier
+  DWORD dwTime  // current system time
+)
+{
+
+	if (lock)
+		return;
+	lock = true;
+
+	std::vector<NcrMarqueeData>::iterator mit;
+	for (mit = Marquees.begin(); mit != Marquees.end(); ++mit) {
+		if (mit->timerId == idEvent) {
+			mit->Step();
+			lock = false;
+			return;
+		}
+	}
+}
+
+
+UINT AddMarquee(const char *port, const std::string &text, int x, int y, int ms, int W)
+{
+
+	if (ms == 0)
+		return 0;
+	if (text.size() == 0)
+		return 0;
+
+	if (ms < 1000) ms = 1000;
+
+	++timer_counter;
+	UINT hResult = (UINT)SetTimer(NULL, 0, ms, (TIMERPROC)MyTimerProc);
+
+	if (hResult == 0)
+		return hResult;
+
+	NcrMarqueeData M;
+	M.port = port;
+	M.text = text;
+	M.x = x;
+	M.y = y;
+	M.timerId = hResult;
+	M.width = W;
+
+	Marquees.push_back(M);
+
+	return hResult;
+}
+
+void DeleteMarquee(int timerId)
+{
+	std::vector<NcrMarqueeData>::iterator mit;
+	for (mit = Marquees.begin(); mit != Marquees.end(); ++mit) {
+		if (mit->timerId == timerId) {
+			mit->Stop();
+			Marquees.erase(mit);
+			break;
+		}
+	}
+}
+
+NcrMarqueeData::NcrMarqueeData(const NcrMarqueeData &src)
+	: text(src.text), x(src.x), y(src.y)
+	, timerId(src.timerId), port(src.port)
+	, width(src.width)
+{}
+
+void NcrMarqueeData::Stop()
+{
+	if (timerId) {
+		KillTimer(NULL, timerId);
+		timerId = 0;
+	}
 }

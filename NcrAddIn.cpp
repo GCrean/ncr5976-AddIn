@@ -46,6 +46,14 @@
   УдалитьОкно()
 */
 
+/*
+CreateWindow (Yview, Xview, Hview, Wview, Hwindow, Wwindow) 
+СоздатьОкно (Yобласти, Xобласти, Вобласти, Шобласти, Вокна, Шокна)
+*/
+
+/*
+ПоказатьТекстПоз (Y, X, Строка, Атрибут) */
+
 static Aliases g_PropNames[] = {
     {L"Версия",                         L"Version"},
     {L"Результат",                      L"Result"},
@@ -62,8 +70,8 @@ static Aliases g_PropNames[] = {
     {L"ОписаниеРезультата",             L"ResultDescription"},
     {L"КолвоСтолбцовДисплея",           L"DeviceColumnCount"},
     {L"УстройствоВключено",             L"DeviceTurnedOn"},
-    {L"ЗадержкаПовтораБегСтроки",       L"MarqueeRepeatDelay"},
-    {L"ЗадержкаПоказаБегСтроки",        L"MarqueeShowDelay"},
+    {L"ЗадержкаПовтораБегСтроки",       L"MarqueeRepeatWait"},
+    {L"ЗадержкаПоказаБегСтроки",        L"MarqueeUnitWait"},
     {L"ТипБегСтроки",                   L"MarqueeType"},
     {L"ТекущееОкно",                    L"CurrentWindow"},
     {L"ФорматБегСтроки",                L"MarqueeFormat"},
@@ -167,6 +175,7 @@ long DestroyObject(IComponentBase** pIntf)
     *pIntf = 0;
     return 0;
 }
+
 //---------------------------------------------------------------------------//
 const WCHAR_T* GetClassNames()
 {
@@ -298,7 +307,12 @@ bool CAddInNCR5976::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
         break;
     case eProp_Result:
         TV_VT(pvarPropVal) = VTYPE_I4;
-		pvarPropVal->lVal = m_devices.Current().GetResult();
+
+		if (m_devices.size())
+			pvarPropVal->lVal = m_devices.Current().GetResult();
+		else
+			pvarPropVal->lVal = 0;
+
         break;
     case eProp_CurrentDeviceNumber:
         TV_VT(pvarPropVal) = VTYPE_I4;
@@ -306,19 +320,54 @@ bool CAddInNCR5976::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
         break;
     case eProp_DeviceColumnCount:
         TV_VT(pvarPropVal) = VTYPE_I4;
-		pvarPropVal->lVal = m_devices.Current().GetColumnCount();
+
+		if (m_devices.size())
+			pvarPropVal->lVal = m_devices.Current().GetColumnCount();
+		else
+			pvarPropVal->lVal = 0;
+
         break;
     case eProp_WindowCount:
         TV_VT(pvarPropVal) = VTYPE_I4;
-		pvarPropVal->lVal = 1; /* TODO: Зашитое количество окон */
+		
+		if (m_devices.size())
+			pvarPropVal->lVal = m_devices.Current().WindowCount();
+		else
+			pvarPropVal->lVal = 0;
+
         break;
     case eProp_DeviceTurnedOn:
 		TV_VT(pvarPropVal) = VTYPE_BOOL;
 		pvarPropVal->bVal = m_devices.Current().TurnedOn();
 		break;
     case eProp_CurrentWindow:
+        
+		TV_VT(pvarPropVal) = VTYPE_I4;
+		if (m_devices.size())
+			pvarPropVal->lVal = m_devices.Current().CurrentWindowNumber() + 1;
+		else
+			pvarPropVal->lVal = 0;
+
+        break;
+
+    case eProp_MarqueeRepeatWait:
         TV_VT(pvarPropVal) = VTYPE_I4;
-		pvarPropVal->lVal = 0; /* TODO: Зашитое количество окон */
+		
+		if (m_devices.size())
+			pvarPropVal->lVal = m_devices.Current().CurrentWindow().MarqueeRepeatWait;
+		else
+			pvarPropVal->lVal = 0;
+
+        break;
+
+    case eProp_MarqueeUnitWait:
+
+        TV_VT(pvarPropVal) = VTYPE_I4;
+		if (m_devices.size()) 
+			pvarPropVal->lVal = m_devices.Current().CurrentWindow().MarqueeUnitWait;
+		else
+			pvarPropVal->lVal = 0;
+
         break;
 
     case eProp_CurrentDeviceName:
@@ -331,8 +380,6 @@ bool CAddInNCR5976::GetPropVal(const long lPropNum, tVariant* pvarPropVal)
     case eProp_Parity:
     case eProp_CodePage:
     case eProp_ResultDescription:
-    case eProp_MarqueeRepeatDelay:
-    case eProp_MarqueeShowDelay:
     case eProp_MarqueeType:
     case eProp_MarqueeFormat:
 
@@ -371,7 +418,20 @@ bool CAddInNCR5976::SetPropVal(const long lPropNum, tVariant *varPropVal)
 			break;
 		}
     case eProp_CurrentWindow:
+		m_devices.Current().CurrentWindowNumber(varPropVal->lVal - 1);
 		return true;
+
+    case eProp_MarqueeType:
+		m_devices.Current().CurrentWindow().MarqueeType = varPropVal->lVal;
+		return true;
+
+    case eProp_MarqueeRepeatWait:
+		m_devices.Current().CurrentWindow().MarqueeRepeatWait = varPropVal->lVal;
+        break;
+
+    case eProp_MarqueeUnitWait:
+		m_devices.Current().CurrentWindow().MarqueeUnitWait = varPropVal->lVal;
+        break;
 
     case eProp_CurrentDeviceName:
     case eProp_Model:
@@ -384,9 +444,6 @@ bool CAddInNCR5976::SetPropVal(const long lPropNum, tVariant *varPropVal)
     case eProp_CodePage:
     case eProp_ResultDescription:
     case eProp_DeviceColumnCount:
-    case eProp_MarqueeRepeatDelay:
-    case eProp_MarqueeShowDelay:
-    case eProp_MarqueeType:
     case eProp_MarqueeFormat:
     case eProp_WindowCount:
         return true;
@@ -418,8 +475,8 @@ bool CAddInNCR5976::IsPropReadable(const long lPropNum)
     case eProp_ResultDescription:
     case eProp_DeviceColumnCount:
     case eProp_DeviceTurnedOn:
-    case eProp_MarqueeRepeatDelay:
-    case eProp_MarqueeShowDelay:
+    case eProp_MarqueeRepeatWait:
+    case eProp_MarqueeUnitWait:
     case eProp_MarqueeType:
     case eProp_CurrentWindow:
     case eProp_MarqueeFormat:
@@ -454,8 +511,8 @@ bool CAddInNCR5976::IsPropWritable(const long lPropNum)
     case eProp_ResultDescription:
     case eProp_DeviceColumnCount:
     case eProp_DeviceTurnedOn:
-    case eProp_MarqueeRepeatDelay:
-    case eProp_MarqueeShowDelay:
+    case eProp_MarqueeRepeatWait:
+	case eProp_MarqueeUnitWait:
     case eProp_MarqueeType:
     case eProp_CurrentWindow:
     case eProp_MarqueeFormat:
@@ -592,6 +649,8 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			m_devices.Current().SendByte(0x1B);
 			m_devices.Current().SendByte(0x22);
 
+			m_devices.Current().CreateNcrWindow(0, 0, 1, 20, 1, 20);
+
 			break;
 
 	case eMeth_SendByte:
@@ -610,8 +669,20 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 
 	case eMeth_CreateWindow:
 		{
+			int Xview = paParams[0].lVal;
+			int Yview = paParams[1].lVal;
+			int Hview = paParams[2].lVal;
+			int Wview = paParams[3].lVal;
+			int Hwindow = paParams[4].lVal;
+			int Wwindow = paParams[5].lVal;
+
+			m_devices.Current().CreateNcrWindow(Xview, Yview, Hview, Wview, Hwindow, Wwindow);
+
 			break;
 		}
+
+	case eMeth_DeleteWindow:
+		m_devices.Current().DeleteNcrWindow();
 
 	case eMeth_ClearText:
 		{
@@ -629,6 +700,13 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			::convFromWtoCP866(&data, W_str, paParams[2].wstrLen);
 			m_devices.Current().SetCursorPos(Row, Col);
 			m_devices.Current().SendString(data);
+
+			if (m_devices.Current().CurrentWindow().MarqueeType) {
+				// Бегущая строка
+				m_devices.Current().CurrentWindow().Text = data;
+				m_devices.Current().CurrentWindow().StartMarquee();
+			} 
+
 			break;
 		}
 

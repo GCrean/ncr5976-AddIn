@@ -5,6 +5,63 @@
 #include <vector>
 #include <string>
 
+class NcrMarqueeData {
+public:
+
+	NcrMarqueeData();
+	NcrMarqueeData(const NcrMarqueeData &src);
+
+	void Step();
+	void Stop();
+
+	std::string			text;
+	int					direction;
+	UINT				timerId;
+
+	unsigned			x, y, pos;
+	unsigned			width;
+	const char		   *port;
+};
+
+class NcrWindow
+{
+public:
+
+	NcrWindow();
+
+	~NcrWindow();
+
+	NcrWindow(
+		const char *port,
+		int Yview,
+		int Xview,
+		int Hview,
+		int Wview,
+		int Hwindow,
+		int Wwindow);
+
+	int Yview;
+	int Xview;
+	int Hview;
+	int Wview;
+	int Hwindow;
+	int Wwindow;
+
+	int MarqueeType;
+	int MarqueeFormat;
+	int MarqueeRepeatWait;
+	int MarqueeUnitWait;
+
+	UINT timerId;
+
+	std::string Text;
+	const char *port;
+
+	void OutputText();
+	void StartMarquee();
+	void StopMarquee();
+
+};
 
 class NcrComPort
 {
@@ -23,6 +80,8 @@ public:
     bool SendData(const char *data);
 	bool SendByte(int byte);
 	void SendString(const char *str);
+	void SendStringLimited(const char *str, int n);
+	void SendStringLimitedBlanked(const char *str, int n);
 
     void Open(const char *port);
 
@@ -37,6 +96,15 @@ public:
 	void SetCursorPos(int Row, int Col);
 	unsigned GetColumnCount() const;
 
+	int WindowCount() const;
+	int CurrentWindowNumber() const;
+	void CurrentWindowNumber(int num);
+	NcrWindow &CurrentWindow();
+	const NcrWindow &CurrentWindow() const;
+
+	void CreateNcrWindow(int Yview, int Xview, int Hview, int Wview, int Hwindow, int Wwindow);
+	void DeleteNcrWindow();
+
 protected:
 private:
 
@@ -50,6 +118,9 @@ private:
 
 	int					m_Result;
 	bool				m_turned_on;
+
+	std::vector<NcrWindow> m_windows;
+	int					m_current_window;
 };
 
 class NcrDeviceList : public std::vector<NcrComPort> {
@@ -71,5 +142,10 @@ private:
     unsigned m_CurrentDeviceNumber;
 };
 
+
+extern int timer_counter;
+
+UINT AddMarquee(const char *port, const std::string &text, int x, int y, int ms, int W);
+void DeleteMarquee(int timerId);
 
 #endif // NCRCOMPORT_H
