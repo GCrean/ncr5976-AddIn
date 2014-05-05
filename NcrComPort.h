@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 
+#define MIN_DISPLAY_INTERVAL 500
+
 class NcrMarqueeData {
 public:
 
@@ -16,7 +18,7 @@ public:
 
 	std::string			text;
 	int					direction;
-	UINT				timerId;
+	HANDLE				timerId;
 
 	unsigned			x, y, pos;
 	unsigned			width;
@@ -52,7 +54,7 @@ public:
 	int MarqueeRepeatWait;
 	int MarqueeUnitWait;
 
-	UINT timerId;
+	HANDLE timerId;
 
 	std::string Text;
 	const char *port;
@@ -145,7 +147,7 @@ private:
 
 extern int timer_counter;
 
-UINT AddMarquee(const char *port, const std::string &text, int x, int y, int ms, int W);
-void DeleteMarquee(int timerId);
+HANDLE AddMarquee(const char *port, const std::string &text, int x, int y, int ms, int W);
+void DeleteMarquee(HANDLE timerId);
 
 #endif // NCRCOMPORT_H

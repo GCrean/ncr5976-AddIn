@@ -199,6 +199,8 @@ bool NcrComPort::TurnedOn() const
 
 void NcrComPort::ClearText()
 {
+	/* CurrentWindow().StopMarquee(); */
+
 	SendByte(0x1B);
 	SendByte(0x02);
 }
@@ -350,36 +352,44 @@ NcrMarqueeData::NcrMarqueeData()
 	: timerId(0)
 {}
 
-static std::vector<NcrMarqueeData> Marquees;
+//static std::vector<NcrMarqueeData> Marquees;
 
-static int call_c = 0x30;
+struct MarqueeThreadData {
+	HANDLE			ThreadId;
+	const char	   *port;
+	std::string		text;
+	int				x;
+	int				y;
+	int				W;
+	int				ms;
+	volatile bool	finish;
+};
 
-static volatile bool lock = false;
+std::vector<MarqueeThreadData *> Threads;
 
-VOID CALLBACK MyTimerProc(
-  HWND hwnd,    // handle of window for timer messages
-  UINT uMsg,    // WM_TIMER message
-  UINT idEvent, // timer identifier
-  DWORD dwTime  // current system time
-)
+static DWORD CALLBACK
+ThreadTimerProc(LPVOID data)
 {
+	MarqueeThreadData *tData = static_cast<MarqueeThreadData *>(data);
 
-	if (lock)
-		return;
-	lock = true;
+	NcrMarqueeData M;
+	M.port = tData->port;
+	M.text = tData->text;
+	M.x = tData->x;
+	M.y = tData->y;
+	M.width = tData->W;
 
-	std::vector<NcrMarqueeData>::iterator mit;
-	for (mit = Marquees.begin(); mit != Marquees.end(); ++mit) {
-		if (mit->timerId == idEvent) {
-			mit->Step();
-			lock = false;
-			return;
-		}
+	while (!tData->finish) {
+		M.Step();
+		Sleep(tData->ms);
 	}
+
+	delete tData;
+	ExitThread(0);
+	return 0;
 }
 
-
-UINT AddMarquee(const char *port, const std::string &text, int x, int y, int ms, int W)
+HANDLE AddMarquee(const char *port, const std::string &text, int x, int y, int ms, int W)
 {
 
 	if (ms == 0)
@@ -387,29 +397,33 @@ UINT AddMarquee(const char *port, const std::string &text, int x, int y, int ms,
 	if (text.size() == 0)
 		return 0;
 
-	if (ms < 1000) ms = 1000;
+	
+	if (ms < MIN_DISPLAY_INTERVAL)
+		ms = MIN_DISPLAY_INTERVAL;
+	
+	MarqueeThreadData *M = new MarqueeThreadData();
+	M->port = port;
+	M->text = text;
+	M->x = x;
+	M->y = y;
+	M->ms = ms;
+	M->W = W;
+	M->finish = false;
 
-	++timer_counter;
-	UINT hResult = (UINT)SetTimer(NULL, 0, ms, (TIMERPROC)MyTimerProc);
+	HANDLE hThread = CreateThread(NULL, 0, ThreadTimerProc, M, CREATE_SUSPENDED, NULL);
 
-	if (hResult == 0)
-		return hResult;
+	M->ThreadId = hThread;
 
-	NcrMarqueeData M;
-	M.port = port;
-	M.text = text;
-	M.x = x;
-	M.y = y;
-	M.timerId = hResult;
-	M.width = W;
+	Threads.push_back(M);
 
-	Marquees.push_back(M);
+	ResumeThread(hThread);
 
-	return hResult;
+	return hThread;
 }
 
-void DeleteMarquee(int timerId)
+void DeleteMarquee(HANDLE timerId)
 {
+	/*
 	std::vector<NcrMarqueeData>::iterator mit;
 	for (mit = Marquees.begin(); mit != Marquees.end(); ++mit) {
 		if (mit->timerId == timerId) {
@@ -418,6 +432,14 @@ void DeleteMarquee(int timerId)
 			break;
 		}
 	}
+	*/
+	std::vector<MarqueeThreadData *>::iterator cit;
+	for (cit = Threads.begin(); cit != Threads.end(); ++cit)
+		if ((*cit)->ThreadId == timerId) {
+			(*cit)->finish = true;
+			Threads.erase(cit, cit);
+			break;
+		}
 }
 
 NcrMarqueeData::NcrMarqueeData(const NcrMarqueeData &src)
@@ -429,7 +451,13 @@ NcrMarqueeData::NcrMarqueeData(const NcrMarqueeData &src)
 void NcrMarqueeData::Stop()
 {
 	if (timerId) {
-		KillTimer(NULL, timerId);
+		std::vector<MarqueeThreadData *>::iterator cit;
+		for (cit = Threads.begin(); cit != Threads.end(); ++cit)
+			if ((*cit)->ThreadId == timerId) {
+				(*cit)->finish = true;
+				Threads.erase(cit, cit);
+				break;
+			}
 		timerId = 0;
 	}
 }

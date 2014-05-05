@@ -705,7 +705,8 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 				// Бегущая строка
 				m_devices.Current().CurrentWindow().Text = data;
 				m_devices.Current().CurrentWindow().StartMarquee();
-			} 
+			} else 
+				m_devices.Current().CurrentWindow().StopMarquee();
 
 			break;
 		}
