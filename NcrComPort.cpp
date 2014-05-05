@@ -384,7 +384,7 @@ ThreadTimerProc(LPVOID data)
 		Sleep(tData->ms);
 	}
 
-	delete tData;
+	//delete tData; // Утечка!
 	ExitThread(0);
 	return 0;
 }
