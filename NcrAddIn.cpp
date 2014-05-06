@@ -651,6 +651,8 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 
 			m_devices.Current().CreateNcrWindow(0, 0, 1, 20, 1, 20);
 
+			m_devices.Current().Close();
+
 			break;
 
 	case eMeth_SendByte:
@@ -659,6 +661,7 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			char byte = (char)(var->intVal);
 
 			m_devices.Current().SendData(&byte);
+			m_devices.Current().Close();
 
 			break;
 		}
@@ -677,16 +680,23 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			int Wwindow = paParams[5].lVal;
 
 			m_devices.Current().CreateNcrWindow(Xview, Yview, Hview, Wview, Hwindow, Wwindow);
+			m_devices.Current().Close();
 
 			break;
 		}
 
 	case eMeth_DeleteWindow:
 		m_devices.Current().DeleteNcrWindow();
+		m_devices.Current().Close();
+		break;
+
+	case eMeth_Clear:
+		StopAllMarquees();
 
 	case eMeth_ClearText:
 		{
 			m_devices.Current().ClearText();
+			m_devices.Current().Close();
 			break;
 		}
 
@@ -698,6 +708,7 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			WCHAR_T *W_str = paParams[2].pwstrVal;
 			char *data = 0;
 			::convFromWtoCP866(&data, W_str, paParams[2].wstrLen);
+
 			m_devices.Current().SetCursorPos(Row, Col);
 			m_devices.Current().SendString(data);
 
@@ -707,6 +718,8 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 				m_devices.Current().CurrentWindow().StartMarquee();
 			} else 
 				m_devices.Current().CurrentWindow().StopMarquee();
+
+			m_devices.Current().Close();
 
 			break;
 		}

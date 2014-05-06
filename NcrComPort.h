@@ -5,7 +5,7 @@
 #include <vector>
 #include <string>
 
-#define MIN_DISPLAY_INTERVAL 500
+#define MIN_DISPLAY_INTERVAL 300
 
 class NcrMarqueeData {
 public:
@@ -86,6 +86,7 @@ public:
 	void SendStringLimitedBlanked(const char *str, int n);
 
     void Open(const char *port);
+	void Close();
 
 	int GetResult() const;
 
@@ -107,6 +108,8 @@ public:
 	void CreateNcrWindow(int Yview, int Xview, int Hview, int Wview, int Hwindow, int Wwindow);
 	void DeleteNcrWindow();
 
+	void SendStringPosThreaded(int row, int column, const char *str);
+
 protected:
 private:
 
@@ -123,6 +126,9 @@ private:
 
 	std::vector<NcrWindow> m_windows;
 	int					m_current_window;
+
+	int OpenPort();
+	void ClosePort();
 };
 
 class NcrDeviceList : public std::vector<NcrComPort> {
@@ -149,5 +155,7 @@ extern int timer_counter;
 
 HANDLE AddMarquee(const char *port, const std::string &text, int x, int y, int ms, int W);
 void DeleteMarquee(HANDLE timerId);
+
+void StopAllMarquees();
 
 #endif // NCRCOMPORT_H

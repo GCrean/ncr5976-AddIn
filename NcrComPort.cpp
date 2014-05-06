@@ -11,15 +11,24 @@ NcrComPort::NcrComPort(const char *port)
     Open(port);
 }
 
+void NcrComPort::Close()
+{
+	if (hPort != 0)
+		ClosePort();
+}
+
+
 
 NcrComPort::~NcrComPort()
 {
-    //dtor
+    if (hPort != 0)
+		ClosePort();
 }
 
 void NcrComPort::Open(const char *port)
 {
     this->Port = port;
+	OpenPort();
 }
 
 void NcrComPort::FillDcb(DCB &dcb)
@@ -32,7 +41,29 @@ void NcrComPort::FillDcb(DCB &dcb)
 
 bool NcrComPort::SendData(const char *data)
 {
+
+	if (hPort == 0) {
+		if (OpenPort() == -1)
+			return false;
+	}
+
     DWORD byteswritten;
+
+    bool retVal = WriteFile(hPort, data, 1, &byteswritten, NULL);
+
+    return retVal;
+}
+
+bool NcrComPort::SendByte(int byte)
+{
+	char b = byte;
+	return SendData(&b);
+}
+
+int NcrComPort::OpenPort()
+{
+	if (hPort != 0)
+		ClosePort();
 
     hPort = CreateFileA(
         this->Port,
@@ -45,22 +76,19 @@ bool NcrComPort::SendData(const char *data)
     );
 
     if (!GetCommState(hPort, &dcb))
-        return false;
+        return -1;
 
     FillDcb(dcb);
 
     if (!SetCommState(hPort, &dcb))
-        return false;
-
-    bool retVal = WriteFile(hPort, data, 1, &byteswritten, NULL);
-    CloseHandle(hPort); //close the handle
-    return retVal;
+        return -1;
+	return 0;
 }
 
-bool NcrComPort::SendByte(int byte)
+void NcrComPort::ClosePort()
 {
-	char b = byte;
-	return SendData(&b);
+	CloseHandle(hPort);
+	hPort = 0;
 }
 
 int NcrComPort::ReadByte()
@@ -238,6 +266,12 @@ void NcrComPort::SetCursorPos(int Row, int Col)
 	SendByte(0x1B);
 	SendByte(0x13);
 	SendByte(X);
+}
+
+void NcrComPort::SendStringPosThreaded(int row, int column, const char *str)
+{
+	SetCursorPos(row, column);
+	SendString(str);
 }
 
 unsigned NcrComPort::GetColumnCount() const
@@ -423,16 +457,6 @@ HANDLE AddMarquee(const char *port, const std::string &text, int x, int y, int m
 
 void DeleteMarquee(HANDLE timerId)
 {
-	/*
-	std::vector<NcrMarqueeData>::iterator mit;
-	for (mit = Marquees.begin(); mit != Marquees.end(); ++mit) {
-		if (mit->timerId == timerId) {
-			mit->Stop();
-			Marquees.erase(mit);
-			break;
-		}
-	}
-	*/
 	std::vector<MarqueeThreadData *>::iterator cit;
 	for (cit = Threads.begin(); cit != Threads.end(); ++cit)
 		if ((*cit)->ThreadId == timerId) {
@@ -440,6 +464,13 @@ void DeleteMarquee(HANDLE timerId)
 			Threads.erase(cit, cit);
 			break;
 		}
+}
+
+void StopAllMarquees()
+{
+	std::vector<MarqueeThreadData *>::iterator cit;
+	for (cit = Threads.begin(); cit != Threads.end(); ++cit)
+		(*cit)->finish = true;
 }
 
 NcrMarqueeData::NcrMarqueeData(const NcrMarqueeData &src)
