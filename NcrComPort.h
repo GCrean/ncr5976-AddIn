@@ -125,7 +125,7 @@ private:
 	bool				m_turned_on;
 
 	std::vector<NcrWindow> m_windows;
-	int					m_current_window;
+	unsigned			m_current_window;
 
 	int OpenPort();
 	void ClosePort();

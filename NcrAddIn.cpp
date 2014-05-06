@@ -100,7 +100,21 @@ uint32_t getLenShortWcharStr(const WCHAR_T* Source);
 uint32_t convFromWtoCP866(char **dest, const WCHAR_T *Source, uint32_t len);
 
 //++ dmpas::debug
-static bool NO_LOG = true;
+
+static void FailLog(const std::string &text)
+{
+	std::ofstream out("c:/pos/fail.txt", std::ios_base::app | std::ios_base::ate);
+	out << text << std::endl;
+}
+
+static void FailLog(const std::wstring &text)
+{
+	std::wofstream out("c:/pos/fail.txt", std::ios_base::app | std::ios_base::ate);
+	out << text << std::endl;
+}
+
+
+static bool NO_LOG = false;
 namespace Debug {
     static bool first = true;
     static bool enabled = true;
@@ -198,6 +212,9 @@ CAddInNCR5976::CAddInNCR5976()
 CAddInNCR5976::~CAddInNCR5976()
 {
     Debug::log("CAddInNCR5976::~CAddInNCR5976");
+	StopAllMarquees();
+	m_devices.clear();
+    Debug::log("CAddInNCR5976::~CAddInNCR5976.Done");
 }
 //---------------------------------------------------------------------------//
 bool CAddInNCR5976::Init(void* pConnection)
@@ -637,38 +654,67 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
     switch(lMethodNum)
     {
 	case eMeth_AddDevice:
-			m_devices.AddDevice();
-			m_devices.Current().Open("COM3");
+		{
+			int op_c = 0;
 
-			m_devices.Current().SendByte(0x1B);
-			m_devices.Current().SendByte(0x02);
+			try {
 
-			m_devices.Current().SendByte(0x1B);
-			m_devices.Current().SendByte(0x05);
+			m_devices.AddDevice(); ++op_c;
+			m_devices.Current().Open("COM3");  ++op_c;// TODO: Брать порт из входящих данных
 
-			m_devices.Current().SendByte(0x1B);
-			m_devices.Current().SendByte(0x22);
+			m_devices.Current().SendByte(0x1B); ++op_c;
+			m_devices.Current().SendByte(0x02); ++op_c;
 
-			m_devices.Current().CreateNcrWindow(0, 0, 1, 20, 1, 20);
+			m_devices.Current().SendByte(0x1B); ++op_c;
+			m_devices.Current().SendByte(0x05); ++op_c;
 
-			m_devices.Current().Close();
+			m_devices.Current().SendByte(0x1B); ++op_c;
+			m_devices.Current().SendByte(0x22); ++op_c;
+
+			m_devices.Current().CreateNcrWindow(0, 0, 1, 20, 1, 20); ++op_c;
+
+			m_devices.Current().Close(); ++op_c;
+
+			} catch (...) {
+
+				FailLog("AddDevice failed");
+				char sbuf[20];
+				sprintf(sbuf, "%d", op_c);
+				FailLog(sbuf);
+
+				wchar_t buf[100];
+				wsprintf(buf, L"AddDevice failed at %d", op_c);
+				addError(1, L"AddDevice", buf, 1);
+			}
 
 			break;
-
+		}
 	case eMeth_SendByte:
 		{
 			tVariant *var = paParams;
 			char byte = (char)(var->intVal);
 
-			m_devices.Current().SendData(&byte);
-			m_devices.Current().Close();
+			if (m_devices.GetCurrentDeviceNumber() != -1) {
+				m_devices.Current().SendData(&byte);
+				m_devices.Current().Close();
+			}
 
 			break;
 		}
 
 	case eMeth_DeleteDevice:
-			m_devices.DeleteDevice();
-			break;
+		
+		try {
+			StopAllMarquees();
+			if (m_devices.GetCurrentDeviceNumber() != -1) {
+				m_devices.DeleteDevice();
+			}
+		} catch (...) {
+			FailLog("DeleteDevice failed");
+			addError(1, L"DeleteDevice", L"DeleteDevice failed", 1);
+		}
+
+		break;
 
 	case eMeth_CreateWindow:
 		{
@@ -679,52 +725,93 @@ bool CAddInNCR5976::CallAsProc(const long lMethodNum,
 			int Hwindow = paParams[4].lVal;
 			int Wwindow = paParams[5].lVal;
 
-			m_devices.Current().CreateNcrWindow(Xview, Yview, Hview, Wview, Hwindow, Wwindow);
-			m_devices.Current().Close();
+			try {
+			if (m_devices.GetCurrentDeviceNumber() != -1) {
+				m_devices.Current().CreateNcrWindow(Xview, Yview, Hview, Wview, Hwindow, Wwindow);
+				m_devices.Current().Close();
+			}
+			} catch (...) {
+				FailLog("CreateWindow failed");
+				addError(1, L"CreateWindow", L"CreateWindow failed", 1);
+			}
+
 
 			break;
 		}
 
 	case eMeth_DeleteWindow:
-		m_devices.Current().DeleteNcrWindow();
-		m_devices.Current().Close();
+		
+		try {
+			if (m_devices.GetCurrentDeviceNumber() != -1) {
+				m_devices.Current().DeleteNcrWindow();
+				m_devices.Current().Close();
+			}
+		} catch (...) {
+			FailLog("DeleteWindow failed");
+			addError(1, L"DeleteWindow", L"DeleteWindow failed", 1);
+		}
+
 		break;
 
 	case eMeth_Clear:
-		StopAllMarquees();
+
+		try {
+			StopAllMarquees();
+		} catch (...) {
+			FailLog("Clear failed");
+			addError(1, L"Clear", L"Clear failed", 1);
+		}
+
+		break;
 
 	case eMeth_ClearText:
 		{
-			m_devices.Current().ClearText();
-			m_devices.Current().Close();
+			try {
+				if (m_devices.GetCurrentDeviceNumber() != -1) {
+					m_devices.Current().ClearText();
+					m_devices.Current().Close();
+				}
+			} catch (...) {
+				FailLog("ClearText failed");
+				addError(1, L"ClearText", L"ClearText failed", 1);
+			}
 			break;
 		}
 
 	case eMeth_ShowTextPos:
 		{
-			int Row = paParams[0].lVal;
-			int Col = paParams[1].lVal;
+			try {
+				int Row = paParams[0].lVal;
+				int Col = paParams[1].lVal;
 
-			WCHAR_T *W_str = paParams[2].pwstrVal;
-			char *data = 0;
-			::convFromWtoCP866(&data, W_str, paParams[2].wstrLen);
+				WCHAR_T *W_str = paParams[2].pwstrVal;
+				char *data = 0;
+				::convFromWtoCP866(&data, W_str, paParams[2].wstrLen);
 
-			m_devices.Current().SetCursorPos(Row, Col);
-			m_devices.Current().SendString(data);
+				if (m_devices.GetCurrentDeviceNumber() != -1) {
+					m_devices.Current().SetCursorPos(Row, Col);
+					m_devices.Current().SendString(data);
 
-			if (m_devices.Current().CurrentWindow().MarqueeType) {
-				// Бегущая строка
-				m_devices.Current().CurrentWindow().Text = data;
-				m_devices.Current().CurrentWindow().StartMarquee();
-			} else 
-				m_devices.Current().CurrentWindow().StopMarquee();
+					if (m_devices.Current().CurrentWindow().MarqueeType) {
+						// Бегущая строка
+						m_devices.Current().CurrentWindow().Text = data;
+						m_devices.Current().CurrentWindow().StartMarquee();
+					} else 
+						m_devices.Current().CurrentWindow().StopMarquee();
 
-			m_devices.Current().Close();
+					m_devices.Current().Close();
+				}
+			} catch (...) {
+				FailLog("ShowTextPos failed");
+				addError(1, L"ShowTextPos", L"ShowTextPos failed", 1);
+			}
 
 			break;
 		}
 
     default:
+		FailLog("Unknown command");
+		addError(2, L"Unknown command", L"Unknown command", 2);
         return false;
     }
 
@@ -758,6 +845,7 @@ void CAddInNCR5976::addError(uint32_t wcode, const wchar_t* source,
                         const wchar_t* descriptor, long code)
 {
     Debug::log("CAddInNCR5976::AddError");
+	FailLog(descriptor);
     if (m_iConnect)
     {
         WCHAR_T *err = 0;

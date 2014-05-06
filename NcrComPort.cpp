@@ -1,6 +1,14 @@
 #include "NcrComPort.h"
+#include <fstream>
 
 extern int timer_counter = 0;
+
+static void FailLog(const std::string &text)
+{
+	std::ofstream out("c:/pos/fail.txt", std::ios_base::app | std::ios_base::ate);
+	out << text << std::endl;
+}
+
 
 NcrComPort::NcrComPort()
 {
@@ -152,7 +160,7 @@ int NcrComPort::GetModel() const
 }
 
 NcrDeviceList::NcrDeviceList()
-    : m_CurrentDeviceNumber(0)
+    : m_CurrentDeviceNumber(-1)
 {
 
 }
@@ -170,14 +178,18 @@ void NcrDeviceList::AddDevice()
 
 NcrComPort &NcrDeviceList::Current()
 {
-    if (m_CurrentDeviceNumber == -1)
+    if (m_CurrentDeviceNumber == -1) {
+		FailLog("No current device! (182)");
         throw std::exception();
+	}
     return at(m_CurrentDeviceNumber);
 }
 const NcrComPort &NcrDeviceList::Current() const
 {
-    if (m_CurrentDeviceNumber == -1)
+    if (m_CurrentDeviceNumber == -1) {
+		FailLog("No current device! (190)");
         throw std::exception();
+	}
     return at(m_CurrentDeviceNumber);
 }
 
@@ -227,8 +239,6 @@ bool NcrComPort::TurnedOn() const
 
 void NcrComPort::ClearText()
 {
-	/* CurrentWindow().StopMarquee(); */
-
 	SendByte(0x1B);
 	SendByte(0x02);
 }
@@ -289,14 +299,28 @@ int NcrComPort::WindowCount() const
 	return m_windows.size();
 }
 
+static NcrWindow no_window;
+
 NcrWindow &NcrComPort::CurrentWindow()
 {
-	return m_windows[m_current_window];
+	if (m_current_window < m_windows.size())
+		return m_windows[m_current_window];
+	/*
+	FailLog("No current window! (306)");
+	throw std::exception();
+	*/
+	return no_window;
 }
 
 const NcrWindow &NcrComPort::CurrentWindow() const
 {
-	return m_windows[m_current_window];
+	if (m_current_window < m_windows.size())
+		return m_windows[m_current_window];
+	/*
+	FailLog("No current window! (314)");
+	throw std::exception();
+	*/
+	return no_window;
 }
 
 int NcrComPort::CurrentWindowNumber() const
@@ -315,7 +339,11 @@ void NcrComPort::CreateNcrWindow(int Yview, int Xview, int Hview, int Wview, int
 
 void NcrComPort::DeleteNcrWindow()
 {
-	m_windows.erase(m_windows.begin() + m_current_window);
+	if (m_current_window < m_windows.size()) {
+		m_windows.erase(m_windows.begin() + m_current_window);
+		if (m_current_window >= m_windows.size())
+			m_current_window = m_windows.size() - 1;
+	}
 }
 
 void NcrComPort::CurrentWindowNumber(int num)
@@ -386,8 +414,6 @@ NcrMarqueeData::NcrMarqueeData()
 	: timerId(0)
 {}
 
-//static std::vector<NcrMarqueeData> Marquees;
-
 struct MarqueeThreadData {
 	HANDLE			ThreadId;
 	const char	   *port;
@@ -413,10 +439,10 @@ ThreadTimerProc(LPVOID data)
 	M.y = tData->y;
 	M.width = tData->W;
 
-	while (!tData->finish) {
+	do {
 		M.Step();
 		Sleep(tData->ms);
-	}
+	} while (!tData->finish);
 
 	//delete tData; // Утечка!
 	ExitThread(0);
